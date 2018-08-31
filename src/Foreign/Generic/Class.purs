@@ -175,16 +175,32 @@ instance genericDecodeArgsNoArguments :: GenericDecodeArgs NoArguments where
 instance genericEncodeArgsNoArguments :: GenericEncodeArgs NoArguments where
   encodeArgs _ = mempty
 
-instance genericDecodeArgsArgument
+instance genericDecodeArgsRecord
+  :: Decode_ (Record a)
+  => GenericDecodeArgs (Argument (Record a)) where
+  decodeArgs = decodeArgsArgument
+  decodeSingleRecordArg = Just (\options i -> Argument <$> decode_ options i)
+else instance genericDecodeArgsArgument
   :: Decode_ a
   => GenericDecodeArgs (Argument a) where
-  decodeArgs opts i (x : xs) = do
-    a <- mapExcept (lmap (map (ErrorAtIndex i))) (decode_ opts x)
-    pure { result: Argument a, rest: xs, next: i + 1 }
-  decodeArgs _ _ _ = fail (ForeignError "Not enough constructor arguments")
+  decodeArgs = decodeArgsArgument
   decodeSingleRecordArg = Nothing
 
-instance genericEncodeArgsArgument
+decodeArgsArgument
+  :: forall a
+   . Decode_ a
+  => Options -> Int -> List Foreign
+  -> F { result :: Argument a, rest :: List Foreign, next :: Int }
+decodeArgsArgument opts i (x : xs) = do
+  a <- mapExcept (lmap (map (ErrorAtIndex i))) (decode_ opts x)
+  pure { result: Argument a, rest: xs, next: i + 1 }
+decodeArgsArgument _ _ _ = fail (ForeignError "Not enough constructor arguments")
+
+instance genericEncodeArgsRecord
+  :: Encode_ (Record a)
+  => GenericEncodeArgs (Argument (Record a)) where
+  encodeArgs opts (Argument a) = singleton (RecArg (encode_ opts a))
+else instance genericEncodeArgsArgument
   :: Encode_ a
   => GenericEncodeArgs (Argument a) where
   encodeArgs opts (Argument a) = singleton (PlainArg (encode_ opts a))
